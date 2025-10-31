@@ -29,6 +29,43 @@ A comprehensive Flutter network monitoring application that checks the availabil
 * Error message display for failed checks
 * Certificate validity date ranges
 
+## Screenshots
+
+### CRLs Monitoring Tab
+
+The CRLs (Certificate Revocation Lists) tab displays all configured CRL monitoring targets with their status, last check timestamps, and expiration dates.
+
+![CRLs Tab](screenshots/crls-tab.png)
+
+* Shows full CRL URLs and filenames
+* Displays green checkmarks for successfully verified CRLs
+* Shows last check time and CRL expiration dates
+* Tap any item to view detailed information
+
+### URLs Monitoring Tab
+
+Monitor HTTP/HTTPS endpoints with certificate validation and expiry tracking.
+
+![URLs Tab](screenshots/urls-tab.png)
+
+### DNS Monitoring Tab
+
+Verify DNS hostname resolution and check resolved IP addresses with ping capability.
+
+![DNS Tab](screenshots/dns-tab.png)
+
+### Detail View
+
+Detailed information screen showing comprehensive status, error messages, certificate details, and network diagnostics.
+
+![Detail View](screenshots/detail-view.png)
+
+### Settings Screen
+
+Configure monitoring targets (URLs, DNS hosts, CRL URLs) with an intuitive interface.
+
+![Settings Screen](screenshots/settings-screen.png)
+
 ## Requirements
 
 * **Flutter SDK**: 3.10.0 or later
