@@ -24,18 +24,18 @@ class DnsResolver {
       List<IpAddressInfo>? ipInfos;
       
       if (addresses.isNotEmpty && pingIps) {
-        // Ping all resolved IP addresses
-        ipInfos = [];
-        for (final address in addresses) {
+        // Ping all resolved IP addresses in parallel
+        final pingFutures = addresses.map((address) async {
           final ip = address.address;
           final pingTime = await _pingService.pingWithTime(ip);
-          ipInfos.add(IpAddressInfo(
+          return IpAddressInfo(
             ipAddress: ip,
             isPingable: pingTime != null,
             pingTime: pingTime,
             pingError: pingTime == null ? 'Connection failed' : null,
-          ));
-        }
+          );
+        });
+        ipInfos = await Future.wait(pingFutures);
       } else if (addresses.isNotEmpty) {
         // Just collect IP addresses without pinging
         ipInfos = addresses.map((addr) => IpAddressInfo(

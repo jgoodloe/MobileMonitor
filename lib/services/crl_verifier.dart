@@ -1,19 +1,30 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:asn1lib/asn1lib.dart';
+import 'package:flutter/foundation.dart';
 import '../models/monitor_status.dart';
 
 class CrlVerifier {
-  final Dio _dio;
+  late final Dio _dio;
+  bool _initialized = false;
 
-  CrlVerifier() : _dio = Dio() {
-    _dio.options.connectTimeout = const Duration(seconds: 10);
-    _dio.options.receiveTimeout = const Duration(seconds: 10);
+  CrlVerifier() {
+    // Lazy initialization to avoid blocking constructor
+    // Actual initialization happens on first use
+  }
+
+  void _ensureInitialized() {
+    if (_initialized) return;
+    _dio = Dio();
+    // Longer timeouts for CRL checks - they can be slow under system load
+    _dio.options.connectTimeout = const Duration(seconds: 15);
+    _dio.options.receiveTimeout = const Duration(seconds: 15);
     _dio.options.validateStatus = (status) => status! < 500;
+    _initialized = true;
   }
 
   Future<MonitorItem> verifyCrl(String crlUrl) async {
+    _ensureInitialized(); // Initialize on first use, not in constructor
     final id = crlUrl;
     final name = crlUrl;
 
@@ -56,7 +67,8 @@ class CrlVerifier {
       
       try {
         // Parse the CRL file to extract issuer (Certificate Authority) and revoked certificates
-        final crlInfo = await _parseCrl(crlBytes);
+        // Use compute() to run parsing in isolate to avoid blocking UI thread
+        final crlInfo = await compute(_parseCrlIsolate, crlBytes);
         certificateAuthority = crlInfo['issuer'] as String?;
         revokedCount = crlInfo['revokedCount'] as int?;
       } catch (e) {
@@ -142,14 +154,10 @@ class CrlVerifier {
         
         // If no expiry from headers, calculate based on typical CRL validity (24-48 hours)
         // Or use a default based on download time
-        if (validTo == null) {
-          // Default CRL validity: 24 hours from now
-          validTo = DateTime.now().add(const Duration(hours: 24));
-        }
+        // Default CRL validity: 24 hours from now
+        validTo ??= DateTime.now().add(const Duration(hours: 24));
         
-        if (validFrom == null) {
-          validFrom = DateTime.now();
-        }
+        validFrom ??= DateTime.now();
         
         final now = DateTime.now();
         final timeUntilInvalid = validTo.difference(now);
@@ -223,22 +231,18 @@ class CrlVerifier {
     }
   }
 
+  /// Top-level function for isolate execution (must be static)
   /// Parses a CRL file to extract issuer information and revoked certificate count
-  /// Wrapped with timeout to prevent hanging on malformed files
-  Future<Map<String, dynamic>> _parseCrl(List<int> crlBytes) async {
+  static Map<String, dynamic> _parseCrlIsolate(List<int> crlBytes) {
     try {
-      return await Future<Map<String, dynamic>>(() {
-        return _parseCrlInternal(crlBytes);
-      }).timeout(const Duration(seconds: 5), onTimeout: () {
-        return <String, dynamic>{};
-      });
+      return _parseCrlInternal(crlBytes);
     } catch (e) {
       return <String, dynamic>{};
     }
   }
   
   /// Internal CRL parsing logic
-  Map<String, dynamic> _parseCrlInternal(List<int> crlBytes) {
+  static Map<String, dynamic> _parseCrlInternal(List<int> crlBytes) {
     final result = <String, dynamic>{};
     
     try {
@@ -330,7 +334,7 @@ class CrlVerifier {
 
   /// Parses a Distinguished Name (DN) from ASN1Sequence
   /// Added safeguards to prevent infinite loops
-  String _parseDistinguishedName(ASN1Sequence dnSequence) {
+  static String _parseDistinguishedName(ASN1Sequence dnSequence) {
     final parts = <String>[];
     
     try {
@@ -387,7 +391,7 @@ class CrlVerifier {
   }
 
   /// Maps OID to readable attribute name
-  String _oidToName(String oid) {
+  static String _oidToName(String oid) {
     // Common X.500 attribute OIDs
     switch (oid) {
       case '2.5.4.3': // CN - Common Name

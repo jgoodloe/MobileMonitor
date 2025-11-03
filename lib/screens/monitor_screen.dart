@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/monitor_status.dart';
 import '../services/url_monitor.dart';
 import '../services/dns_resolver.dart';
@@ -30,7 +31,13 @@ class _MonitorScreenState extends State<MonitorScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadConfigurationAndCheck();
+    // Defer initial check until after first frame renders to prevent startup jank
+    // Add small delay to let system stabilize after initial render
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _loadConfigurationAndCheck();
+      });
+    });
   }
 
   @override
@@ -44,53 +51,147 @@ class _MonitorScreenState extends State<MonitorScreen> with SingleTickerProvider
   }
 
   Future<void> _checkAll() async {
+    if (!mounted) return;
     setState(() {
       _isRefreshing = true;
     });
 
+    // Yield to UI thread before starting heavy work
+    await Future.delayed(Duration.zero);
+
     try {
-      // Load configuration
-      final urls = await _configManager.getUrls();
-      final dnsHosts = await _configManager.getDnsHosts();
-      final crlUrls = await _configManager.getCrlUrls();
+      // Load configuration in parallel to reduce latency
+      final configResults = await Future.wait<List<String>>([
+        _configManager.getUrls(),
+        _configManager.getDnsHosts(),
+        _configManager.getCrlUrls(),
+      ]);
+      final urls = configResults[0];
+      final dnsHosts = configResults[1];
+      final crlUrls = configResults[2];
 
-      // Check URLs
-      final urlResults = <MonitorItem>[];
-      for (final url in urls) {
-        final result = await _urlMonitor.checkUrl(url);
-        urlResults.add(result);
-      }
-
-      // Check DNS hosts with ping enabled for detail view
-      final dnsResults = <MonitorItem>[];
-      for (final host in dnsHosts) {
-        final result = await _dnsResolver.checkDnsHost(host, pingIps: true);
-        dnsResults.add(result);
-      }
-
-      // Check CRLs
-      final crlResults = <MonitorItem>[];
-      for (final crlUrl in crlUrls) {
-        final result = await _crlVerifier.verifyCrl(crlUrl);
-        crlResults.add(result);
-      }
-
-      setState(() {
-        _urlItems = urlResults;
-        _dnsItems = dnsResults;
-        _crlItems = crlResults;
-        _isRefreshing = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isRefreshing = false;
-      });
+      // Initialize lists with empty results for incremental updates
       if (mounted) {
+        setState(() {
+          _urlItems = urls.map((url) => _createPlaceholderItem(url, MonitorType.url)).toList();
+          _dnsItems = dnsHosts.map((host) => _createPlaceholderItem(host, MonitorType.dns)).toList();
+          _crlItems = crlUrls.map((url) => _createPlaceholderItem(url, MonitorType.crl)).toList();
+        });
+      }
+
+      // Yield to UI thread
+      await Future.delayed(Duration.zero);
+
+      // Process checks incrementally to avoid blocking UI
+      // URLs first
+      for (int i = 0; i < urls.length; i++) {
+        if (!mounted) return;
+        try {
+          final result = await _urlMonitor.checkUrl(urls[i]);
+          if (mounted) {
+            setState(() {
+              _urlItems[i] = result;
+            });
+            // Yield every few items to keep UI responsive
+            if (i % 2 == 0) {
+              await Future.delayed(Duration.zero);
+            }
+          }
+        } catch (e) {
+          // Continue with next item on error
+        }
+      }
+
+      // Yield before DNS checks
+      await Future.delayed(Duration.zero);
+
+      // DNS hosts (without ping for initial check - ping is only for detail view)
+      for (int i = 0; i < dnsHosts.length; i++) {
+        if (!mounted) return;
+        try {
+          final result = await _dnsResolver.checkDnsHost(dnsHosts[i], pingIps: false);
+          if (mounted) {
+            setState(() {
+              _dnsItems[i] = result;
+            });
+            // Yield every few items to keep UI responsive
+            if (i % 2 == 0) {
+              await Future.delayed(Duration.zero);
+            }
+          }
+        } catch (e) {
+          // Continue with next item on error
+        }
+      }
+
+      // Yield before CRL checks and let system stabilize
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // CRLs last (these can be heavy and need more time under load)
+      for (int i = 0; i < crlUrls.length; i++) {
+        if (!mounted) return;
+        try {
+          // Add retry logic for CRL checks - they may fail under system load
+          MonitorItem result = await _crlVerifier.verifyCrl(crlUrls[i]);
+          int retries = 2;
+          
+          // Retry on transient errors (timeouts, connection errors)
+          while (retries > 0 && 
+                 result.status == MonitorStatus.down && 
+                 result.errorMessage != null &&
+                 (result.errorMessage!.toLowerCase().contains('timeout') ||
+                  result.errorMessage!.toLowerCase().contains('connection') ||
+                  result.errorMessage!.toLowerCase().contains('failed'))) {
+            retries--;
+            if (retries > 0) {
+              // Wait before retry to let system recover
+              await Future.delayed(const Duration(milliseconds: 300));
+              result = await _crlVerifier.verifyCrl(crlUrls[i]);
+            }
+          }
+          
+          if (mounted) {
+            setState(() {
+              _crlItems[i] = result;
+            });
+          }
+          
+          // Add delay between CRL checks to avoid overwhelming system
+          // This gives the network and CPU time to recover
+          if (i < crlUrls.length - 1) {
+            await Future.delayed(const Duration(milliseconds: 150));
+          }
+        } catch (e) {
+          // Continue with next item on error
+        }
+      }
+
+      // Final update
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error checking: $e')),
         );
       }
     }
+  }
+
+  MonitorItem _createPlaceholderItem(String name, MonitorType type) {
+    return MonitorItem(
+      id: name,
+      name: name,
+      type: type,
+      status: MonitorStatus.unknown,
+      lastCheckTime: null,
+    );
   }
 
   Widget _buildMonitorItemCard(MonitorItem item) {
@@ -101,6 +202,7 @@ class _MonitorScreenState extends State<MonitorScreen> with SingleTickerProvider
             : Colors.grey;
 
     return Card(
+      key: ValueKey(item.id),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListTile(
         leading: CircleAvatar(
@@ -194,6 +296,9 @@ class _MonitorScreenState extends State<MonitorScreen> with SingleTickerProvider
             ),
           );
         },
+        isThreeLine: item.errorMessage != null || 
+                     item.certificateInfo != null || 
+                     item.crlValidityInfo != null,
       ),
     );
   }
@@ -219,7 +324,7 @@ class _MonitorScreenState extends State<MonitorScreen> with SingleTickerProvider
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.info_outline, size: 64, color: Colors.grey[400]),
+            const Icon(Icons.info_outline, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
               emptyMessage,
@@ -239,6 +344,7 @@ class _MonitorScreenState extends State<MonitorScreen> with SingleTickerProvider
       onRefresh: _checkAll,
       child: ListView.builder(
         itemCount: items.length,
+        cacheExtent: 200, // Cache a bit more to reduce rebuilds
         itemBuilder: (context, index) {
           return _buildMonitorItemCard(items[index]);
         },

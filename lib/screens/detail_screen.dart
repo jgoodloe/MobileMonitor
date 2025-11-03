@@ -44,22 +44,26 @@ class _DetailScreenState extends State<DetailScreen> {
     });
 
     final pingService = PingService();
-    final pingedIps = <IpAddressInfo>[];
-
-    for (final ipInfo in widget.item.ipAddresses!) {
+    
+    // Ping all IPs in parallel for better performance
+    final pingFutures = widget.item.ipAddresses!.map((ipInfo) async {
       final pingTime = await pingService.pingWithTime(ipInfo.ipAddress);
-      pingedIps.add(IpAddressInfo(
+      return IpAddressInfo(
         ipAddress: ipInfo.ipAddress,
         isPingable: pingTime != null,
         pingTime: pingTime,
         pingError: pingTime == null ? 'Connection failed' : null,
-      ));
-    }
-
-    setState(() {
-      _pingedIps = pingedIps;
-      _isPinging = false;
+      );
     });
+
+    final pingedIps = await Future.wait(pingFutures);
+
+    if (mounted) {
+      setState(() {
+        _pingedIps = pingedIps;
+        _isPinging = false;
+      });
+    }
   }
 
   Future<void> _resolveAndPingCrlServer() async {
@@ -70,10 +74,12 @@ class _DetailScreenState extends State<DetailScreen> {
       
       if (hostname.isEmpty) return;
       
-      setState(() {
-        _crlHostname = hostname;
-        _isPinging = true;
-      });
+      if (mounted) {
+        setState(() {
+          _crlHostname = hostname;
+          _isPinging = true;
+        });
+      }
 
       // Perform DNS resolution with timeout
       final addresses = await InternetAddress.lookup(hostname)
@@ -81,38 +87,45 @@ class _DetailScreenState extends State<DetailScreen> {
         return <InternetAddress>[];
       });
       
-      if (addresses.isEmpty) {
-        setState(() {
-          _pingedIps = [];
-          _isPinging = false;
-        });
+            if (addresses.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _pingedIps = [];
+            _isPinging = false;
+          });
+        }
         return;
       }
 
-      // Ping each resolved IP address
+      // Ping all resolved IP addresses in parallel for better performance
       final pingService = PingService();
-      final pingedIps = <IpAddressInfo>[];
-
-      for (final address in addresses) {
+      
+      final pingFutures = addresses.map((address) async {
         final ip = address.address;
         final pingTime = await pingService.pingWithTime(ip);
-        pingedIps.add(IpAddressInfo(
+        return IpAddressInfo(
           ipAddress: ip,
           isPingable: pingTime != null,
           pingTime: pingTime,
           pingError: pingTime == null ? 'Connection failed' : null,
-        ));
-      }
+        );
+      });
 
-      setState(() {
-        _pingedIps = pingedIps;
-        _isPinging = false;
-      });
+      final pingedIps = await Future.wait(pingFutures);
+
+      if (mounted) {
+        setState(() {
+          _pingedIps = pingedIps;
+          _isPinging = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _pingedIps = [];
-        _isPinging = false;
-      });
+      if (mounted) {
+        setState(() {
+          _pingedIps = [];
+          _isPinging = false;
+        });
+      }
     }
   }
 

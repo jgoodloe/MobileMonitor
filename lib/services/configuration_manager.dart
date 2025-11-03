@@ -25,36 +25,43 @@ class ConfigurationManager {
     'http://152.186.38.46/CRLs/XTec_PIVI_CA1.crl',
   ];
 
+  // Cache SharedPreferences instance to avoid multiple getInstance() calls
+  static SharedPreferences? _prefs;
+  static Future<SharedPreferences> _getPrefs() async {
+    _prefs ??= await SharedPreferences.getInstance();
+    return _prefs!;
+  }
+
   Future<List<String>> getUrls() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final urls = prefs.getStringList(_urlsKey);
     return urls ?? _defaultUrls;
   }
 
   Future<void> setUrls(List<String> urls) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setStringList(_urlsKey, urls);
   }
 
   Future<List<String>> getDnsHosts() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final hosts = prefs.getStringList(_dnsHostsKey);
     return hosts ?? _defaultDnsHosts;
   }
 
   Future<void> setDnsHosts(List<String> hosts) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setStringList(_dnsHostsKey, hosts);
   }
 
   Future<List<String>> getCrlUrls() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     final urls = prefs.getStringList(_crlUrlsKey);
     return urls ?? _defaultCrlUrls;
   }
 
   Future<void> setCrlUrls(List<String> urls) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _getPrefs();
     await prefs.setStringList(_crlUrlsKey, urls);
   }
 

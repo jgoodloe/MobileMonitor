@@ -10,8 +10,15 @@ class TlsException implements Exception {
 
 class UrlMonitor {
   late final Dio _dio;
+  bool _initialized = false;
 
   UrlMonitor() {
+    // Lazy initialization to avoid blocking constructor
+    // Actual initialization happens on first use
+  }
+
+  void _ensureInitialized() {
+    if (_initialized) return;
     _dio = Dio();
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
@@ -27,9 +34,11 @@ class UrlMonitor {
       };
       return client;
     };
+    _initialized = true;
   }
 
   Future<MonitorItem> checkUrl(String url) async {
+    _ensureInitialized(); // Initialize on first use, not in constructor
     final id = url;
     final name = url;
     
@@ -91,14 +100,12 @@ class UrlMonitor {
             errorType = e.type.toString();
           }
           
-          if (errorDetails == null) {
-            errorDetails = UrlErrorDetails(
-              errorType: errorType,
-              responseTime: stopwatch.elapsed,
-              isSslError: isSslError,
-              sslErrorMessage: sslErrorMessage,
-            );
-          }
+          errorDetails ??= UrlErrorDetails(
+            errorType: errorType,
+            responseTime: stopwatch.elapsed,
+            isSslError: isSslError,
+            sslErrorMessage: sslErrorMessage,
+          );
           
           return MonitorItem(
             id: id,

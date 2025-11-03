@@ -267,6 +267,31 @@ Output: `build/app/outputs/flutter-apk/app-release.apk`
 
 **Note:** Release builds use debug signing by default. For production, configure proper signing in `android/app/build.gradle.kts`.
 
+## Performance Optimizations
+
+The app has been optimized for performance to prevent UI blocking and ensure smooth operation:
+
+### CPU-Intensive Operations
+- **CRL Parsing**: Heavy ASN.1 parsing operations are executed in isolates using `compute()` to prevent blocking the UI thread
+- **Parallel Execution**: All monitoring checks (URLs, DNS, CRLs) run in parallel instead of sequentially
+- **Parallel Pinging**: IP address pinging operations execute concurrently for faster completion
+
+### UI Optimization
+- **ListView.builder**: Lists use lazy loading to only render visible items
+- **Selective Rebuilds**: Widget rebuilds are optimized with proper `mounted` checks and minimal `setState` calls
+- **Cache Extent**: ListView caching is configured to reduce unnecessary rebuilds
+- **Const Widgets**: Static widgets are marked as `const` to minimize rebuild overhead
+
+### Network Operations
+- **Timeouts**: All network operations have proper timeouts to prevent hanging
+- **Async/Await**: All I/O operations are non-blocking and use proper async patterns
+- **Error Handling**: Robust error handling prevents crashes and ensures graceful degradation
+
+### Best Practices
+- All `setState` calls are guarded with `mounted` checks
+- Proper use of `Future.wait()` for parallel execution
+- Efficient data structures and minimal memory allocations
+
 ## Troubleshooting
 
 ### Build Issues
