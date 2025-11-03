@@ -1,4 +1,4 @@
-# Monitor v2 - Flutter Network Monitoring App
+# MobileMonitor - Flutter Network Monitoring App
 
 A comprehensive Flutter network monitoring application that checks the availability and status of URLs, DNS hosts, and Certificate Revocation Lists (CRLs). The app provides real-time monitoring with certificate expiry warnings and detailed status information.
 
