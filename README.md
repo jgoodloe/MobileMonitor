@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Monitor v2 - Flutter Network Monitoring App
 
 A comprehensive Flutter network monitoring application that checks the availability and status of URLs, DNS hosts, and Certificate Revocation Lists (CRLs). The app provides real-time monitoring with certificate expiry warnings and detailed status information.
@@ -348,3 +349,6 @@ For issues and questions, please open an issue on GitHub.
 ---
 
 **Note**: This application is designed for monitoring network endpoints and certificates. Ensure you have permission to monitor the configured targets before use.
+=======
+
+>>>>>>> 9a2fe50a95c929891c984c724fe7bab2f1a2bf3b
