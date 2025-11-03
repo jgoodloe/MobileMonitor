@@ -222,17 +222,39 @@ class CrlValidityInfo {
   final DateTime? validFrom;
   final DateTime? validTo;
   final Duration? timeUntilInvalid;
+  final Duration? crlAge; // Age of CRL from ThisUpdate
   final bool isExpiringSoon;
   final int? revokedCertificateCount; // Number of revoked certificates in CRL
   final String? certificateAuthority; // CA that issued the CRL
+  
+  // CRL Extensions (CRL-level)
+  final String? crlNumber; // OID 2.5.29.20 - CRL Number (hex string)
+  final String? authorityKeyIdentifier; // OID 2.5.29.35 - Authority Key Identifier
+  final String? issuingDistributionPoint; // OID 2.5.29.28 - Issuing Distribution Point
+  final bool isDeltaCrl; // OID 2.5.29.46 - Delta CRL Indicator
+  final int? deltaCrlBaseNumber; // Base CRL number for Delta CRL
+  final List<String>? freshestCrlUrls; // OID 2.5.29.47 - Freshest CRL (Delta CRL Distribution Point)
+  
+  // Revoked Certificate Entry Extensions (aggregated info)
+  final Map<String, int>? revocationReasonCounts; // Count of revocations by reason code
+  final List<DateTime?>? invalidityDates; // Invalidity dates from revoked certificates
 
   CrlValidityInfo({
     this.validFrom,
     this.validTo,
     this.timeUntilInvalid,
+    this.crlAge,
     this.isExpiringSoon = false,
     this.revokedCertificateCount,
     this.certificateAuthority,
+    this.crlNumber,
+    this.authorityKeyIdentifier,
+    this.issuingDistributionPoint,
+    this.isDeltaCrl = false,
+    this.deltaCrlBaseNumber,
+    this.freshestCrlUrls,
+    this.revocationReasonCounts,
+    this.invalidityDates,
   });
 
   Map<String, dynamic> toJson() {
@@ -243,10 +265,35 @@ class CrlValidityInfo {
       'isExpiringSoon': isExpiringSoon,
       'revokedCertificateCount': revokedCertificateCount,
       'certificateAuthority': certificateAuthority,
+      'crlNumber': crlNumber,
+      'crlAge': crlAge?.inMilliseconds,
+      'authorityKeyIdentifier': authorityKeyIdentifier,
+      'issuingDistributionPoint': issuingDistributionPoint,
+      'isDeltaCrl': isDeltaCrl,
+      'deltaCrlBaseNumber': deltaCrlBaseNumber,
+      'freshestCrlUrls': freshestCrlUrls,
+      'revocationReasonCounts': revocationReasonCounts,
+      'invalidityDates': invalidityDates?.map((d) => d?.toIso8601String()).toList(),
     };
   }
 
   factory CrlValidityInfo.fromJson(Map<String, dynamic> json) {
+    Map<String, int>? revocationReasonCounts;
+    if (json['revocationReasonCounts'] != null) {
+      revocationReasonCounts = Map<String, int>.from(
+        (json['revocationReasonCounts'] as Map).map(
+          (k, v) => MapEntry(k.toString(), v as int),
+        ),
+      );
+    }
+    
+    List<DateTime?>? invalidityDates;
+    if (json['invalidityDates'] != null) {
+      invalidityDates = (json['invalidityDates'] as List)
+          .map((d) => d != null ? DateTime.parse(d as String) : null)
+          .toList();
+    }
+    
     return CrlValidityInfo(
       validFrom: json['validFrom'] != null
           ? DateTime.parse(json['validFrom'] as String)
@@ -260,6 +307,19 @@ class CrlValidityInfo {
       isExpiringSoon: json['isExpiringSoon'] as bool? ?? false,
       revokedCertificateCount: json['revokedCertificateCount'] as int?,
       certificateAuthority: json['certificateAuthority'] as String?,
+      crlNumber: json['crlNumber'] as String?,
+      crlAge: json['crlAge'] != null
+          ? Duration(milliseconds: json['crlAge'] as int)
+          : null,
+      authorityKeyIdentifier: json['authorityKeyIdentifier'] as String?,
+      issuingDistributionPoint: json['issuingDistributionPoint'] as String?,
+      isDeltaCrl: json['isDeltaCrl'] as bool? ?? false,
+      deltaCrlBaseNumber: json['deltaCrlBaseNumber'] as int?,
+      freshestCrlUrls: json['freshestCrlUrls'] != null
+          ? List<String>.from(json['freshestCrlUrls'] as List)
+          : null,
+      revocationReasonCounts: revocationReasonCounts,
+      invalidityDates: invalidityDates,
     );
   }
 }

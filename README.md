@@ -28,6 +28,10 @@ A comprehensive Flutter network monitoring application that checks the availabil
 * Timestamp tracking for last test time
 * Error message display for failed checks
 * Certificate validity date ranges
+* CRL extension parsing (CRL Number, Authority Key Identifier, Issuing Distribution Point, Delta CRL Indicator, Freshest CRL)
+* Timezone-aware date display (times shown in local timezone)
+* CRL age calculation from thisUpdate date
+* Revoked certificate count tracking
 
 ## Screenshots
 
@@ -41,6 +45,14 @@ The CRLs (Certificate Revocation Lists) tab displays all configured CRL monitori
 * Displays green checkmarks for successfully verified CRLs
 * Shows last check time and CRL expiration dates
 * Tap any item to view detailed information
+* Displays CRL information including:
+  * This Update and Next Update dates (parsed from CRL structure)
+  * Age of CRL (calculated from thisUpdate)
+  * Number of revoked certificates
+  * CRL Number (OID 2.5.29.20)
+  * Certificate Authority issuer
+  * Authority Key Identifier
+  * Other CRL extensions when available
 
 ### URLs Monitoring Tab
 
@@ -201,6 +213,7 @@ monitor/
 * **dio**: ^5.4.0 - HTTP client for network requests
 * **http**: ^1.2.0 - Additional HTTP utilities
 * **shared_preferences**: ^2.2.2 - Persistent storage for settings
+* **asn1lib**: ASN.1 parsing library for CRL structure decoding
 
 ## Architecture
 
@@ -215,6 +228,12 @@ The app follows a clean architecture pattern:
 * **UrlMonitor**: Handles HTTP/HTTPS URL checks and SSL certificate validation
 * **DnsResolver**: Performs DNS hostname resolution checks
 * **CrlVerifier**: Downloads and validates Certificate Revocation Lists
+  * Parses ASN.1 CRL structure to extract thisUpdate and nextUpdate dates
+  * Extracts CRL extensions (CRL Number, Authority Key Identifier, Issuing Distribution Point, etc.)
+  * Counts revoked certificates
+  * Calculates CRL age from thisUpdate date
+  * Handles both UTCTime and GeneralizedTime formats
+  * Timezone-aware date parsing and display
 * **ConfigurationManager**: Manages persistent configuration using SharedPreferences
 
 ## Permissions
@@ -327,6 +346,12 @@ The app has been optimized for performance to prevent UI blocking and ensure smo
    * Some certificates may show as invalid if self-signed
    * The app accepts all certificates for monitoring purposes
    * Check certificate details in the detail view
+
+4. **CRL Date Display**
+   * CRL dates are displayed in your local timezone
+   * Times are automatically converted from UTC to local time
+   * CRL age is calculated from the thisUpdate date
+   * If dates appear incorrect, check that the CRL is properly formatted and includes thisUpdate/nextUpdate fields
 
 ## Version Information
 
