@@ -22,16 +22,14 @@ class _DetailScreenState extends State<DetailScreen> {
   void initState() {
     super.initState();
     // If DNS item doesn't have ping info, ping them now
-    if (widget.item.type == MonitorType.dns &&
+    if (widget.item.type == MonitorType.dns && 
         widget.item.ipAddresses != null &&
-        widget.item.ipAddresses!.any(
-          (ip) => !ip.isPingable && ip.pingTime == null,
-        )) {
+        widget.item.ipAddresses!.any((ip) => !ip.isPingable && ip.pingTime == null)) {
       _pingIps();
     } else {
       _pingedIps = widget.item.ipAddresses;
     }
-
+    
     // For CRL items, resolve DNS and ping server addresses
     if (widget.item.type == MonitorType.crl) {
       _resolveAndPingCrlServer();
@@ -39,15 +37,14 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _pingIps() async {
-    if (widget.item.ipAddresses == null || widget.item.ipAddresses!.isEmpty)
-      return;
-
+    if (widget.item.ipAddresses == null || widget.item.ipAddresses!.isEmpty) return;
+    
     setState(() {
       _isPinging = true;
     });
 
     final pingService = PingService();
-
+    
     // Ping all IPs in parallel for better performance
     final pingFutures = widget.item.ipAddresses!.map((ipInfo) async {
       final pingTime = await pingService.pingWithTime(ipInfo.ipAddress);
@@ -74,9 +71,9 @@ class _DetailScreenState extends State<DetailScreen> {
       // Extract hostname from CRL URL
       final uri = Uri.parse(widget.item.name);
       final hostname = uri.host;
-
+      
       if (hostname.isEmpty) return;
-
+      
       if (mounted) {
         setState(() {
           _crlHostname = hostname;
@@ -85,14 +82,12 @@ class _DetailScreenState extends State<DetailScreen> {
       }
 
       // Perform DNS resolution with timeout
-      final addresses = await InternetAddress.lookup(hostname).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          return <InternetAddress>[];
-        },
-      );
-
-      if (addresses.isEmpty) {
+      final addresses = await InternetAddress.lookup(hostname)
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        return <InternetAddress>[];
+      });
+      
+            if (addresses.isEmpty) {
         if (mounted) {
           setState(() {
             _pingedIps = [];
@@ -104,7 +99,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
       // Ping all resolved IP addresses in parallel for better performance
       final pingService = PingService();
-
+      
       final pingFutures = addresses.map((address) async {
         final ip = address.address;
         final pingTime = await pingService.pingWithTime(ip);
@@ -139,10 +134,8 @@ class _DetailScreenState extends State<DetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_getTypeLabel(widget.item.type)),
-        actions:
-            (widget.item.type == MonitorType.dns &&
-                    widget.item.ipAddresses != null) ||
-                widget.item.type == MonitorType.crl
+        actions: (widget.item.type == MonitorType.dns && widget.item.ipAddresses != null) ||
+                 widget.item.type == MonitorType.crl
             ? [
                 IconButton(
                   icon: _isPinging
@@ -152,13 +145,11 @@ class _DetailScreenState extends State<DetailScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh),
-                  onPressed: _isPinging
-                      ? null
-                      : (widget.item.type == MonitorType.dns
-                            ? _pingIps
-                            : _resolveAndPingCrlServer),
-                  tooltip: widget.item.type == MonitorType.dns
-                      ? 'Re-ping IPs'
+                  onPressed: _isPinging 
+                      ? null 
+                      : (widget.item.type == MonitorType.dns ? _pingIps : _resolveAndPingCrlServer),
+                  tooltip: widget.item.type == MonitorType.dns 
+                      ? 'Re-ping IPs' 
                       : 'Re-resolve and ping server',
                 ),
               ]
@@ -180,8 +171,7 @@ class _DetailScreenState extends State<DetailScreen> {
               const SizedBox(height: 16),
               _buildUrlErrorDetailsCard(),
             ],
-            if (widget.item.type == MonitorType.dns &&
-                (_pingedIps != null || widget.item.ipAddresses != null)) ...[
+            if (widget.item.type == MonitorType.dns && (_pingedIps != null || widget.item.ipAddresses != null)) ...[
               const SizedBox(height: 16),
               _buildDnsIpsCard(),
             ],
@@ -189,13 +179,11 @@ class _DetailScreenState extends State<DetailScreen> {
               const SizedBox(height: 16),
               _buildCrlValidityCard(),
             ],
-            if (widget.item.type == MonitorType.crl &&
-                (_pingedIps != null || _isPinging)) ...[
+            if (widget.item.type == MonitorType.crl && (_pingedIps != null || _isPinging)) ...[
               const SizedBox(height: 16),
               _buildCrlServerAddressesCard(),
             ],
-            if (widget.item.errorMessage != null &&
-                widget.item.urlErrorDetails == null) ...[
+            if (widget.item.errorMessage != null && widget.item.urlErrorDetails == null) ...[
               const SizedBox(height: 16),
               _buildErrorCard(),
             ],
@@ -209,8 +197,8 @@ class _DetailScreenState extends State<DetailScreen> {
     final color = widget.item.status == MonitorStatus.up
         ? Colors.green
         : widget.item.status == MonitorStatus.down
-        ? Colors.red
-        : Colors.grey;
+            ? Colors.red
+            : Colors.grey;
 
     return Card(
       child: Padding(
@@ -224,8 +212,8 @@ class _DetailScreenState extends State<DetailScreen> {
                 widget.item.status == MonitorStatus.up
                     ? Icons.check_circle
                     : widget.item.status == MonitorStatus.down
-                    ? Icons.error
-                    : Icons.help_outline,
+                        ? Icons.error
+                        : Icons.help_outline,
                 color: Colors.white,
                 size: 40,
               ),
@@ -238,11 +226,11 @@ class _DetailScreenState extends State<DetailScreen> {
                   Text(
                     widget.item.status == MonitorStatus.up
                         ? widget.item.type == MonitorType.dns
-                              ? 'RESOLVED'
-                              : 'UP'
+                            ? 'RESOLVED'
+                            : 'UP'
                         : widget.item.status == MonitorStatus.down
-                        ? 'DOWN'
-                        : 'UNKNOWN',
+                            ? 'DOWN'
+                            : 'UNKNOWN',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -250,7 +238,10 @@ class _DetailScreenState extends State<DetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(widget.item.name, style: const TextStyle(fontSize: 16)),
+                  Text(
+                    widget.item.name,
+                    style: const TextStyle(fontSize: 16),
+                  ),
                 ],
               ),
             ),
@@ -302,10 +293,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 if (cert.isExpiringSoon)
                   Container(
                     margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.orange,
                       borderRadius: BorderRadius.circular(12),
@@ -355,10 +343,7 @@ class _DetailScreenState extends State<DetailScreen> {
             if (errorDetails.errorType != null)
               _buildInfoRow('Error Type', errorDetails.errorType!),
             if (errorDetails.httpStatusCode != null)
-              _buildInfoRow(
-                'HTTP Status Code',
-                errorDetails.httpStatusCode!.toString(),
-              ),
+              _buildInfoRow('HTTP Status Code', errorDetails.httpStatusCode!.toString()),
             if (errorDetails.responseTime != null)
               _buildInfoRow(
                 'Response Time',
@@ -367,13 +352,9 @@ class _DetailScreenState extends State<DetailScreen> {
             if (errorDetails.isSslError == true) ...[
               _buildInfoRow('SSL/TLS Error', 'Yes'),
               if (errorDetails.sslErrorMessage != null)
-                _buildInfoRow(
-                  'SSL/TLS Error Message',
-                  errorDetails.sslErrorMessage!,
-                ),
+                _buildInfoRow('SSL/TLS Error Message', errorDetails.sslErrorMessage!),
             ],
-            if (errorDetails.responseBody != null &&
-                errorDetails.responseBody!.isNotEmpty)
+            if (errorDetails.responseBody != null && errorDetails.responseBody!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Column(
@@ -397,10 +378,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           errorDetails.responseBody!.length > 1000
                               ? '${errorDetails.responseBody!.substring(0, 1000)}...\n\n(Truncated)'
                               : errorDetails.responseBody!,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                          ),
+                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                         ),
                       ),
                     ),
@@ -419,19 +397,12 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 20,
-                    ),
+                    const Icon(Icons.error_outline, color: Colors.red, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: SelectableText(
                         widget.item.errorMessage!,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -446,7 +417,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Widget _buildDnsIpsCard() {
     final ips = _pingedIps ?? widget.item.ipAddresses ?? [];
-
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -475,7 +446,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Widget _buildCrlServerAddressesCard() {
     final ips = _pingedIps ?? [];
-
+    
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -567,16 +538,13 @@ class _DetailScreenState extends State<DetailScreen> {
             Row(
               children: [
                 const Text(
-                  'CRL Information',
+                  'CRL Validity Period',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 if (validity.isExpiringSoon)
                   Container(
                     margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.orange,
                       borderRadius: BorderRadius.circular(12),
@@ -594,131 +562,26 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             const Divider(),
             if (validity.validFrom != null)
-              _buildInfoRow('This Update', _formatDate(validity.validFrom!)),
+              _buildInfoRow('Valid From', validity.validFrom!.toLocal().toString()),
             if (validity.validTo != null)
-              _buildInfoRow('Next Update', _formatDate(validity.validTo!)),
-            if (validity.crlAge != null) ...[
-              _buildInfoRow('Age of CRL', _formatDuration(validity.crlAge!)),
+              _buildInfoRow('Valid To', validity.validTo!.toLocal().toString()),
+            if (validity.timeUntilInvalid != null) ...[
+              _buildInfoRow(
+                'Time Until Invalid',
+                _formatDuration(validity.timeUntilInvalid!),
+              ),
             ],
-            if (validity.crlNumber != null)
-              _buildInfoRow('CRL Number (OID 2.5.29.20)', validity.crlNumber!),
+            if (validity.certificateAuthority != null)
+              _buildInfoRow('Certificate Authority', validity.certificateAuthority!),
             if (validity.revokedCertificateCount != null)
               _buildInfoRow(
-                '# of Revoked Certificates',
+                'Revoked Certificates',
                 validity.revokedCertificateCount!.toString(),
               ),
-            if (validity.certificateAuthority != null)
-              _buildInfoRow(
-                'Certificate Authority',
-                validity.certificateAuthority!,
-              ),
-            if (validity.authorityKeyIdentifier != null)
-              _buildInfoRow(
-                'Authority Key ID',
-                validity.authorityKeyIdentifier!,
-              ),
-            if (validity.issuingDistributionPoint != null)
-              _buildInfoRow(
-                'Issuing Distribution Point',
-                validity.issuingDistributionPoint!,
-              ),
-            if (validity.isDeltaCrl) ...[
-              _buildInfoRow('Type', 'Delta CRL'),
-              if (validity.deltaCrlBaseNumber != null)
-                _buildInfoRow(
-                  'Base CRL Number',
-                  validity.deltaCrlBaseNumber!.toString(),
-                ),
-            ],
-            if (validity.freshestCrlUrls != null &&
-                validity.freshestCrlUrls!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const Text(
-                'Freshest CRL URLs:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              ...validity.freshestCrlUrls!.map(
-                (url) => Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: SelectableText(url),
-                ),
-              ),
-            ],
           ],
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    // Format: Sunday, November 2, 2025 4:34:09 PM
-    // Convert UTC date to local timezone for display
-    final localDate = date.isUtc ? date.toLocal() : date;
-
-    // DateTime.weekday: Monday=1, Tuesday=2, ..., Sunday=7
-    final weekdayNames = [
-      '',
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
-    final weekday = weekdayNames[localDate.weekday];
-    final month = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ][localDate.month - 1];
-    final day = localDate.day;
-    final year = localDate.year;
-    final hour = localDate.hour;
-    final hour12 = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-    final amPm = hour >= 12 ? 'PM' : 'AM';
-    final minute = localDate.minute.toString().padLeft(2, '0');
-    final second = localDate.second.toString().padLeft(2, '0');
-
-    // Get timezone abbreviation for display
-    final timezone = _getCurrentTimezone();
-
-    return '$weekday, $month $day, $year $hour12:$minute:$second $amPm $timezone';
-  }
-
-  String _getCurrentTimezone() {
-    final now = DateTime.now();
-    // Get the timezone offset from the DateTime object
-    final offset = now.timeZoneOffset;
-
-    // Get hours and minutes from the offset Duration
-    final offsetHours = offset.inHours;
-    final offsetMinutes = offset.inMinutes.remainder(60).abs();
-
-    // Format timezone offset (e.g., UTC-5, UTC+9:30)
-    String offsetStr;
-    if (offsetHours == 0 && offsetMinutes == 0) {
-      offsetStr = 'UTC';
-    } else if (offsetMinutes == 0) {
-      offsetStr = offsetHours >= 0
-          ? 'UTC+$offsetHours'
-          : 'UTC$offsetHours'; // Negative sign already included
-    } else {
-      final sign = offsetHours >= 0 ? '+' : '';
-      offsetStr =
-          'UTC$sign${offsetHours.abs()}:${offsetMinutes.toString().padLeft(2, '0')}';
-    }
-
-    return offsetStr;
   }
 
   String _formatDuration(Duration duration) {
@@ -773,7 +636,9 @@ class _DetailScreenState extends State<DetailScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(child: SelectableText(value)),
+          Expanded(
+            child: SelectableText(value),
+          ),
         ],
       ),
     );
