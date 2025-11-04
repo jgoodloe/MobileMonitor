@@ -573,22 +573,218 @@ class CrlVerifier {
               }
             }
 
-            // Extract extensions (optional) - context-specific [1] IMPLICIT Extensions
-            if (tbsCertList.elements.length > elementIndex) {
-              final extensionsElement = tbsCertList.elements[elementIndex];
+            // Extract extensions (optional) - context-specific [0] EXPLICIT Extensions
+            // Check remaining elements for tagged extension (tag 0)
+            for (
+              int extIdx = elementIndex;
+              extIdx < tbsCertList.elements.length;
+              extIdx++
+            ) {
+              final potentialExtElement = tbsCertList.elements[extIdx];
               print(
-                'DEBUG CRL PARSE: Extensions element type: ${extensionsElement.runtimeType}, tag: ${extensionsElement.tag}',
+                'DEBUG CRL PARSE: Checking element $extIdx for extensions, type: ${potentialExtElement.runtimeType}, tag: ${potentialExtElement.tag}',
               );
-              if (extensionsElement is ASN1Sequence) {
-                print('DEBUG CRL PARSE: Parsing CRL extensions...');
-                _parseCrlExtensions(extensionsElement, result);
+
+              // Extensions are tagged as [0] EXPLICIT, which means they may be wrapped
+              // Check if this is a tagged element with tag 0 (context-specific)
+              // Tag 0xA0 = context-specific [0] constructed, tag 0x80 = context-specific [0] primitive
+              ASN1Sequence? extensionsSequence;
+
+              // Check for context-specific tag [0] (0xA0 for constructed, 0x80 for primitive)
+              final isTaggedZero =
+                  (potentialExtElement.tag & 0xE0) == 0xA0 ||
+                  (potentialExtElement.tag & 0xE0) == 0x80 ||
+                  potentialExtElement.tag == 0xA0 ||
+                  potentialExtElement.tag == 0x80 ||
+                  potentialExtElement.tag == 0;
+
+              if (isTaggedZero) {
+                // This is a context-specific tag [0], which wraps the Extensions sequence
                 print(
-                  'DEBUG CRL PARSE: Extensions parsing complete. Result keys now: ${result.keys.toList()}',
+                  'DEBUG CRL PARSE: Found tagged element with tag ${potentialExtElement.tag} (hex: 0x${potentialExtElement.tag.toRadixString(16)}), extracting inner sequence...',
                 );
-              } else {
+
+                // For EXPLICIT tagging, the tag wraps the SEQUENCE
+                // The asn1lib should decode it, so check if it's already a sequence
+                if (potentialExtElement is ASN1Sequence) {
+                  extensionsSequence = potentialExtElement;
+                  print(
+                    'DEBUG CRL PARSE: Tagged element is already ASN1Sequence',
+                  );
+                } else {
+                  // Try to extract the inner sequence from the tagged wrapper
+                  // For EXPLICIT [0], structure is: [0] { length, SEQUENCE { ... } }
+                  // We need to parse the encoded bytes to get the inner SEQUENCE
+                  try {
+                    final octets = potentialExtElement.encodedBytes;
+                    print(
+                      'DEBUG CRL PARSE: Tagged element encoded bytes length: ${octets.length}',
+                    );
+                    if (octets.isNotEmpty) {
+                      // Parse from the bytes, skipping the outer tag wrapper
+                      int offset = 0;
+
+                      // Check for tag 0xA0 (context-specific [0] constructed)
+                      if (offset < octets.length && octets[offset] == 0xA0) {
+                        offset++; // Skip tag byte
+                        print(
+                          'DEBUG CRL PARSE: Skipped tag byte, offset now: $offset',
+                        );
+
+                        // Parse DER length encoding
+                        if (offset < octets.length) {
+                          int lenByte = octets[offset];
+                          if (lenByte & 0x80 == 0) {
+                            // Short form: single byte length
+                            offset += 1;
+                            print(
+                              'DEBUG CRL PARSE: Short form length: $lenByte, offset now: $offset',
+                            );
+                          } else {
+                            // Long form: multi-byte length
+                            int lenLen = lenByte & 0x7F;
+                            if (lenLen > 0 &&
+                                lenLen <= 4 &&
+                                offset + 1 + lenLen < octets.length) {
+                              offset += 1 + lenLen;
+                              print(
+                                'DEBUG CRL PARSE: Long form length, lenLen: $lenLen, offset now: $offset',
+                              );
+                            } else {
+                              print(
+                                'DEBUG CRL PARSE: Invalid long form length encoding',
+                              );
+                              offset = octets.length; // Skip this attempt
+                            }
+                          }
+                        }
+
+                        // Now parse the inner SEQUENCE (content after tag and length)
+                        if (offset < octets.length) {
+                          final innerBytes = octets.sublist(offset);
+                          print(
+                            'DEBUG CRL PARSE: Attempting to parse inner sequence, bytes length: ${innerBytes.length}',
+                          );
+                          try {
+                            final parser = ASN1Parser(
+                              Uint8List.fromList(innerBytes),
+                            );
+                            final parsed = parser.nextObject();
+                            print(
+                              'DEBUG CRL PARSE: Parsed inner object type: ${parsed.runtimeType}, tag: ${parsed.tag}',
+                            );
+                            if (parsed is ASN1Sequence) {
+                              extensionsSequence = parsed;
+                              print(
+                                'DEBUG CRL PARSE: Successfully parsed inner sequence from tagged wrapper bytes, sequence has ${extensionsSequence.elements.length} elements',
+                              );
+                            } else {
+                              print(
+                                'DEBUG CRL PARSE: Inner object is not ASN1Sequence: ${parsed.runtimeType}',
+                              );
+                            }
+                          } catch (parseError) {
+                            print(
+                              'DEBUG CRL PARSE: Failed to parse inner bytes as ASN1: $parseError',
+                            );
+                          }
+                        } else {
+                          print(
+                            'DEBUG CRL PARSE: Offset >= octets.length, cannot parse inner sequence',
+                          );
+                        }
+                      } else {
+                        print(
+                          'DEBUG CRL PARSE: First byte is not 0xA0: 0x${octets.isNotEmpty ? octets[0].toRadixString(16) : "empty"}',
+                        );
+                        // Try parsing the entire octets as a sequence (maybe the tag was already stripped)
+                        try {
+                          final parser = ASN1Parser(Uint8List.fromList(octets));
+                          final parsed = parser.nextObject();
+                          if (parsed is ASN1Sequence) {
+                            extensionsSequence = parsed;
+                            print(
+                              'DEBUG CRL PARSE: Parsed entire octets as sequence, has ${extensionsSequence.elements.length} elements',
+                            );
+                          }
+                        } catch (e) {
+                          print(
+                            'DEBUG CRL PARSE: Failed to parse entire octets: $e',
+                          );
+                        }
+                      }
+                    }
+                  } catch (e, stackTrace) {
+                    print(
+                      'DEBUG CRL PARSE: Exception extracting inner sequence from tagged element: $e',
+                    );
+                    print('DEBUG CRL PARSE: Stack trace: $stackTrace');
+                  }
+                }
+              } else if (potentialExtElement is ASN1Sequence &&
+                  extIdx == tbsCertList.elements.length - 1) {
+                // Last element might be extensions without explicit tagging (some CRLs)
                 print(
-                  'DEBUG CRL PARSE: Extensions element is not ASN1Sequence',
+                  'DEBUG CRL PARSE: Checking if last element is untagged extensions sequence...',
                 );
+                extensionsSequence = potentialExtElement;
+              }
+
+              if (extensionsSequence != null) {
+                print(
+                  'DEBUG CRL PARSE: Found extensions sequence, parsing CRL extensions...',
+                );
+                final keysBefore = result.keys.toList();
+                _parseCrlExtensions(extensionsSequence, result);
+                final keysAfter = result.keys.toList();
+                print(
+                  'DEBUG CRL PARSE: Extensions parsing complete. Keys before: $keysBefore, keys after: $keysAfter',
+                );
+                // If we successfully extracted at least one extension, we're done
+                if (keysAfter.length > keysBefore.length ||
+                    result.containsKey('crlNumber')) {
+                  print(
+                    'DEBUG CRL PARSE: Successfully extracted extensions, stopping search',
+                  );
+                  break; // Found extensions, no need to check further
+                } else {
+                  print(
+                    'DEBUG CRL PARSE: No extensions extracted from this sequence, continuing search...',
+                  );
+                }
+              }
+            }
+
+            // Fallback: if we haven't found extensions yet, try parsing the last sequence element
+            // as extensions (some CRLs may have untagged extensions)
+            if (!result.containsKey('crlNumber') &&
+                tbsCertList.elements.isNotEmpty) {
+              final lastElement =
+                  tbsCertList.elements[tbsCertList.elements.length - 1];
+              if (lastElement is ASN1Sequence &&
+                  lastElement.elements.isNotEmpty) {
+                print(
+                  'DEBUG CRL PARSE: Fallback: Trying to parse last element as extensions sequence...',
+                );
+                // Check if it looks like an Extensions sequence (contains sequences with OIDs)
+                bool looksLikeExtensions = false;
+                for (final elem in lastElement.elements) {
+                  if (elem is ASN1Sequence && elem.elements.isNotEmpty) {
+                    if (elem.elements[0] is ASN1ObjectIdentifier) {
+                      looksLikeExtensions = true;
+                      break;
+                    }
+                  }
+                }
+                if (looksLikeExtensions) {
+                  print(
+                    'DEBUG CRL PARSE: Last element looks like extensions, parsing...',
+                  );
+                  _parseCrlExtensions(lastElement, result);
+                  print(
+                    'DEBUG CRL PARSE: Fallback parsing complete. Result keys: ${result.keys.toList()}',
+                  );
+                }
               }
             }
           }
@@ -1024,60 +1220,68 @@ class CrlVerifier {
                   final integerObj = parser.nextObject();
                   if (integerObj is ASN1Integer) {
                     try {
-                      final crlNumberValue = (integerObj as dynamic).value;
-                      if (crlNumberValue != null) {
-                        // Format as hex string
-                        BigInt crlNumBigInt;
-                        if (crlNumberValue is BigInt) {
-                          crlNumBigInt = crlNumberValue;
-                        } else if (crlNumberValue is int) {
-                          crlNumBigInt = BigInt.from(crlNumberValue);
+                      // ASN1Integer doesn't have a value property, decode from encodedBytes
+                      final encodedBytes = integerObj.encodedBytes;
+                      if (encodedBytes.isNotEmpty) {
+                        // Skip tag and length bytes to get to the integer value
+                        int offset = 1; // Skip tag byte (0x02 for INTEGER)
+                        if (encodedBytes.length > offset) {
+                          int lenByte = encodedBytes[offset];
+                          if (lenByte & 0x80 == 0) {
+                            // Short form: single byte length
+                            offset += 1;
+                          } else {
+                            // Long form: multi-byte length
+                            int lenLen = lenByte & 0x7F;
+                            if (lenLen > 0 &&
+                                lenLen <= 4 &&
+                                offset + 1 + lenLen < encodedBytes.length) {
+                              offset += 1 + lenLen;
+                            }
+                          }
+                        }
+
+                        if (offset < encodedBytes.length) {
+                          final valueBytes = encodedBytes.sublist(offset);
+                          // Decode BigInt from bytes (two's complement for signed integers)
+                          BigInt crlNumber = BigInt.zero;
+                          for (int i = 0; i < valueBytes.length; i++) {
+                            crlNumber =
+                                (crlNumber << 8) | BigInt.from(valueBytes[i]);
+                          }
+
+                          // Handle two's complement for negative numbers (if MSB is set)
+                          // CRL numbers should always be positive, but handle it just in case
+                          if (valueBytes.isNotEmpty &&
+                              (valueBytes[0] & 0x80) != 0) {
+                            // Negative number in two's complement - shouldn't happen for CRL numbers
+                            final mask =
+                                (BigInt.one << (valueBytes.length * 8)) -
+                                BigInt.one;
+                            crlNumber = crlNumber - (mask + BigInt.one);
+                          }
+
+                          // Format as lowercase hex without 0x prefix, padded to even bytes
+                          final hexStr = crlNumber
+                              .toRadixString(16)
+                              .toLowerCase();
+                          // Pad to even number of hex digits (multiple of 2 for full bytes)
+                          final paddedHex = hexStr.length.isOdd
+                              ? '0$hexStr'
+                              : hexStr;
+                          result['crlNumber'] = paddedHex;
+                          print(
+                            'DEBUG CRL PARSE EXT: Extracted CRL Number from encoded bytes: ${result['crlNumber']}',
+                          );
                         } else {
-                          try {
-                            crlNumBigInt = BigInt.parse(
-                              crlNumberValue.toString(),
-                            );
-                          } catch (_) {
-                            crlNumBigInt = BigInt.zero;
-                          }
+                          print(
+                            'DEBUG CRL PARSE EXT: Offset >= encodedBytes.length, cannot extract CRL Number',
+                          );
                         }
-                        result['crlNumber'] =
-                            '0x${crlNumBigInt.toRadixString(16).toUpperCase()}';
-                        print(
-                          'DEBUG CRL PARSE EXT: Extracted CRL Number from value property: ${result['crlNumber']}',
-                        );
                       } else {
-                        // Fallback: decode from encodedBytes
-                        final encodedBytes = integerObj.encodedBytes;
-                        if (encodedBytes.isNotEmpty) {
-                          int offset = 1;
-                          if (encodedBytes.length > offset) {
-                            int lenByte = encodedBytes[offset];
-                            if (lenByte & 0x80 == 0) {
-                              offset += 1;
-                            } else {
-                              int lenLen = lenByte & 0x7F;
-                              if (lenLen > 0 &&
-                                  lenLen <= 4 &&
-                                  offset + lenLen < encodedBytes.length) {
-                                offset += 1 + lenLen;
-                              }
-                            }
-                          }
-                          if (offset < encodedBytes.length) {
-                            final valueBytes = encodedBytes.sublist(offset);
-                            BigInt crlNumber = BigInt.zero;
-                            for (int i = 0; i < valueBytes.length; i++) {
-                              crlNumber =
-                                  (crlNumber << 8) | BigInt.from(valueBytes[i]);
-                            }
-                            result['crlNumber'] =
-                                '0x${crlNumber.toRadixString(16).toUpperCase()}';
-                            print(
-                              'DEBUG CRL PARSE EXT: Extracted CRL Number from encoded bytes: ${result['crlNumber']}',
-                            );
-                          }
-                        }
+                        print(
+                          'DEBUG CRL PARSE EXT: ASN1Integer encodedBytes is empty',
+                        );
                       }
                     } catch (e) {
                       print(
