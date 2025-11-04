@@ -437,19 +437,6 @@ class CrlVerifier {
               'DEBUG CRL PARSE: tbsCertList has ${tbsCertList.elements.length} elements, elementIndex: $elementIndex',
             );
 
-            // Debug: print all elements to understand structure
-            for (int i = 0; i < tbsCertList.elements.length; i++) {
-              final elem = tbsCertList.elements[i];
-              print(
-                'DEBUG CRL PARSE: Element $i: type=${elem.runtimeType}, tag=${elem.tag}',
-              );
-              if (elem is ASN1Sequence && elem.elements.isNotEmpty) {
-                print(
-                  'DEBUG CRL PARSE: Element $i toString preview: ${elem.toString().substring(0, elem.toString().length > 100 ? 100 : elem.toString().length)}...',
-                );
-              }
-            }
-
             if (tbsCertList.elements.length > elementIndex) {
               final issuerElement = tbsCertList.elements[elementIndex];
               print(
