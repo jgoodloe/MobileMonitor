@@ -4,6 +4,7 @@ class ConfigurationManager {
   static const String _urlsKey = 'monitor_urls';
   static const String _dnsHostsKey = 'monitor_dns_hosts';
   static const String _crlUrlsKey = 'monitor_crl_urls';
+  static const String _countRevokedCertificatesKey = 'monitor_count_revoked_certificates';
 
   // Default values from the original app
   static const List<String> _defaultUrls = [
@@ -65,10 +66,22 @@ class ConfigurationManager {
     await prefs.setStringList(_crlUrlsKey, urls);
   }
 
+  Future<bool> getCountRevokedCertificates() async {
+    final prefs = await _getPrefs();
+    // Default to true to maintain current behavior
+    return prefs.getBool(_countRevokedCertificatesKey) ?? true;
+  }
+
+  Future<void> setCountRevokedCertificates(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_countRevokedCertificatesKey, value);
+  }
+
   Future<void> resetToDefaults() async {
     await setUrls(_defaultUrls);
     await setDnsHosts(_defaultDnsHosts);
     await setCrlUrls(_defaultCrlUrls);
+    await setCountRevokedCertificates(true);
   }
 }
 

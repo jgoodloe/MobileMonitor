@@ -16,11 +16,12 @@ class _SettingsScreenState extends State<SettingsScreen>
   List<String> _urls = [];
   List<String> _dnsHosts = [];
   List<String> _crlUrls = [];
+  bool _countRevokedCertificates = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadConfiguration();
   }
 
@@ -34,11 +35,13 @@ class _SettingsScreenState extends State<SettingsScreen>
     final urls = await _configManager.getUrls();
     final dnsHosts = await _configManager.getDnsHosts();
     final crlUrls = await _configManager.getCrlUrls();
+    final countRevoked = await _configManager.getCountRevokedCertificates();
 
     setState(() {
       _urls = List.from(urls);
       _dnsHosts = List.from(dnsHosts);
       _crlUrls = List.from(crlUrls);
+      _countRevokedCertificates = countRevoked;
     });
   }
 
@@ -66,6 +69,15 @@ class _SettingsScreenState extends State<SettingsScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('CRL URLs saved')));
+    }
+  }
+
+  Future<void> _saveCountRevokedCertificates() async {
+    await _configManager.setCountRevokedCertificates(_countRevokedCertificates);
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Preferences saved')));
     }
   }
 
@@ -263,6 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             Tab(text: 'URLs', icon: Icon(Icons.link)),
             Tab(text: 'DNS', icon: Icon(Icons.dns)),
             Tab(text: 'CRLs', icon: Icon(Icons.security)),
+            Tab(text: 'Preferences', icon: Icon(Icons.tune)),
           ],
         ),
         actions: [
@@ -335,8 +348,32 @@ class _SettingsScreenState extends State<SettingsScreen>
             (index, newValue) => _crlUrls[index] = newValue,
             _saveCrlUrls,
           ),
+          _buildPreferencesTab(),
         ],
       ),
+    );
+  }
+
+  Widget _buildPreferencesTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: SwitchListTile(
+            title: const Text('Count Revoked Certificates'),
+            subtitle: const Text(
+              'Disable to speed up CRL processing by skipping certificate counting',
+            ),
+            value: _countRevokedCertificates,
+            onChanged: (value) {
+              setState(() {
+                _countRevokedCertificates = value;
+              });
+              _saveCountRevokedCertificates();
+            },
+          ),
+        ),
+      ],
     );
   }
 }

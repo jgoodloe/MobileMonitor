@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:asn1lib/asn1lib.dart';
 import 'package:flutter/foundation.dart';
 import '../models/monitor_status.dart';
+import 'configuration_manager.dart';
 
 class CrlVerifier {
   late final Dio _dio;
@@ -73,9 +74,17 @@ class CrlVerifier {
 
       try {
         print('DEBUG CRL: Starting CRL parsing in isolate...');
+        // Get setting for counting revoked certificates
+        final configManager = ConfigurationManager();
+        final countRevoked = await configManager.getCountRevokedCertificates();
+        print('DEBUG CRL: Count revoked certificates setting: $countRevoked');
+
         // Parse the CRL file to extract issuer (Certificate Authority) and revoked certificates
         // Use compute() to run parsing in isolate to avoid blocking UI thread
-        final crlInfo = await compute(_parseCrlIsolate, crlBytes);
+        final crlInfo = await compute(_parseCrlIsolate, {
+          'crlBytes': crlBytes,
+          'countRevoked': countRevoked,
+        });
         print(
           'DEBUG CRL: Parsing complete. Result keys: ${crlInfo.keys.toList()}',
         );
@@ -342,10 +351,16 @@ class CrlVerifier {
 
   /// Top-level function for isolate execution (must be static)
   /// Parses a CRL file to extract issuer information and revoked certificate count
-  static Map<String, dynamic> _parseCrlIsolate(List<int> crlBytes) {
+  static Map<String, dynamic> _parseCrlIsolate(Map<String, dynamic> params) {
     final logs = <String>[];
     try {
-      final result = _parseCrlInternal(crlBytes, logs: logs);
+      final crlBytes = params['crlBytes'] as List<int>;
+      final countRevoked = params['countRevoked'] as bool? ?? true;
+      final result = _parseCrlInternal(
+        crlBytes,
+        countRevoked: countRevoked,
+        logs: logs,
+      );
       result['parsingLogs'] = logs;
       return result;
     } catch (e) {
@@ -357,6 +372,7 @@ class CrlVerifier {
   /// Internal CRL parsing logic
   static Map<String, dynamic> _parseCrlInternal(
     List<int> crlBytes, {
+    bool countRevoked = true,
     List<String>? logs,
   }) {
     final result = <String, dynamic>{};
@@ -572,15 +588,24 @@ class CrlVerifier {
                 'DEBUG CRL PARSE: Revoked certificates element type: ${revokedCertificates.runtimeType}',
               );
               if (revokedCertificates is ASN1Sequence) {
-                // Count revoked certificates - each revoked cert is a Sequence
-                final revokedCount = revokedCertificates.elements.length;
-                result['revokedCount'] = revokedCount;
-                parsingLogs.add(
-                  'Found $revokedCount revoked certificates in CRL',
-                );
-                print(
-                  'DEBUG CRL PARSE: Found ${revokedCertificates.elements.length} revoked certificates',
-                );
+                if (countRevoked) {
+                  // Count revoked certificates - each revoked cert is a Sequence
+                  final revokedCount = revokedCertificates.elements.length;
+                  result['revokedCount'] = revokedCount;
+                  parsingLogs.add(
+                    'Found $revokedCount revoked certificates in CRL',
+                  );
+                  print(
+                    'DEBUG CRL PARSE: Found ${revokedCertificates.elements.length} revoked certificates',
+                  );
+                } else {
+                  parsingLogs.add(
+                    'Skipping revoked certificate count (disabled in settings)',
+                  );
+                  print(
+                    'DEBUG CRL PARSE: Skipping revoked certificate count (disabled in settings)',
+                  );
+                }
                 elementIndex++;
               }
             }
