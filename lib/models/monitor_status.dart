@@ -233,6 +233,7 @@ class CrlValidityInfo {
   final int? revokedCertificateCount; // Number of revoked certificates in CRL
   final String? certificateAuthority; // CA that issued the CRL
   final String? crlNumber; // CRL Number (OID 2.5.29.20)
+  final List<String> parsingLogs; // Logs from parsing the CRL
 
   CrlValidityInfo({
     this.validFrom,
@@ -242,6 +243,7 @@ class CrlValidityInfo {
     this.revokedCertificateCount,
     this.certificateAuthority,
     this.crlNumber,
+    this.parsingLogs = const [],
   });
 
   Map<String, dynamic> toJson() {
@@ -253,6 +255,7 @@ class CrlValidityInfo {
       'revokedCertificateCount': revokedCertificateCount,
       'certificateAuthority': certificateAuthority,
       'crlNumber': crlNumber,
+      'parsingLogs': parsingLogs,
     };
   }
 

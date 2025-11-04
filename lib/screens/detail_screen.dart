@@ -612,6 +612,27 @@ class _DetailScreenState extends State<DetailScreen> {
                 '# of Revoked Certificates',
                 validity.revokedCertificateCount!.toString(),
               ),
+            // Add parsing logs section
+            if (validity.parsingLogs.isNotEmpty) ...[
+              const Divider(),
+              const Text(
+                'Logs:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...validity.parsingLogs.map(
+                (log) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: SelectableText(
+                    log,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -45,6 +45,7 @@ class CrlVerifier {
       }
 
       final crlBytes = response.data as List<int>;
+      List<String> parsingLogsList = [];
       if (crlBytes.isEmpty) {
         return MonitorItem(
           id: id,
@@ -83,6 +84,11 @@ class CrlVerifier {
         certificateAuthority = crlInfo['issuer'] as String?;
         revokedCount = crlInfo['revokedCount'] as int?;
         crlNumber = crlInfo['crlNumber'] as String?;
+        parsingLogsList =
+            (crlInfo['parsingLogs'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            <String>[];
 
         print('DEBUG CRL: Extracted issuer: $certificateAuthority');
         print('DEBUG CRL: Extracted revokedCount: $revokedCount');
@@ -226,6 +232,7 @@ class CrlVerifier {
           revokedCertificateCount: revokedCount,
           certificateAuthority: certificateAuthority,
           crlNumber: crlNumber,
+          parsingLogs: parsingLogsList,
         );
         print('DEBUG CRL: CrlValidityInfo created successfully');
       } else {
@@ -336,19 +343,28 @@ class CrlVerifier {
   /// Top-level function for isolate execution (must be static)
   /// Parses a CRL file to extract issuer information and revoked certificate count
   static Map<String, dynamic> _parseCrlIsolate(List<int> crlBytes) {
+    final logs = <String>[];
     try {
-      return _parseCrlInternal(crlBytes);
+      final result = _parseCrlInternal(crlBytes, logs: logs);
+      result['parsingLogs'] = logs;
+      return result;
     } catch (e) {
-      return <String, dynamic>{};
+      logs.add('Error parsing CRL: $e');
+      return {'parsingLogs': logs};
     }
   }
 
   /// Internal CRL parsing logic
-  static Map<String, dynamic> _parseCrlInternal(List<int> crlBytes) {
+  static Map<String, dynamic> _parseCrlInternal(
+    List<int> crlBytes, {
+    List<String>? logs,
+  }) {
     final result = <String, dynamic>{};
+    final parsingLogs = logs ?? <String>[];
     print(
       'DEBUG CRL PARSE: Starting _parseCrlInternal with ${crlBytes.length} bytes',
     );
+    parsingLogs.add('Parsing CRL binary data (${crlBytes.length} bytes)');
 
     try {
       // Limit parsing to reasonable file sizes (max 10MB)
@@ -459,6 +475,7 @@ class CrlVerifier {
                   print('DEBUG CRL PARSE: Parsed issuer DN: $issuerDn');
                   if (issuerDn.isNotEmpty) {
                     result['issuer'] = issuerDn;
+                    parsingLogs.add('Parsed issuer DN: $issuerDn');
                   }
                   elementIndex++;
                 } else {
@@ -504,6 +521,7 @@ class CrlVerifier {
                   final issuerDn = _parseDistinguishedName(thisUpdateElement);
                   if (issuerDn.isNotEmpty) {
                     result['issuer'] = issuerDn;
+                    parsingLogs.add('Parsed issuer DN: $issuerDn');
                     print(
                       'DEBUG CRL PARSE: Found issuer DN at thisUpdate position: $issuerDn',
                     );
@@ -522,6 +540,7 @@ class CrlVerifier {
                           'DEBUG CRL PARSE: Parsed thisUpdate: $thisUpdateStr',
                         );
                         result['thisUpdate'] = thisUpdateStr;
+                        parsingLogs.add('Parsed thisUpdate: $thisUpdateStr');
                       }
                       elementIndex++;
                     }
@@ -534,6 +553,7 @@ class CrlVerifier {
                 if (thisUpdateStr != null) {
                   print('DEBUG CRL PARSE: Parsed thisUpdate: $thisUpdateStr');
                   result['thisUpdate'] = thisUpdateStr;
+                  parsingLogs.add('Parsed thisUpdate: $thisUpdateStr');
                 } else {
                   print('DEBUG CRL PARSE: Failed to parse thisUpdate');
                 }
@@ -551,6 +571,7 @@ class CrlVerifier {
               if (nextUpdateStr != null) {
                 print('DEBUG CRL PARSE: Parsed nextUpdate: $nextUpdateStr');
                 result['nextUpdate'] = nextUpdateStr;
+                parsingLogs.add('Parsed nextUpdate: $nextUpdateStr');
               } else {
                 print('DEBUG CRL PARSE: Failed to parse nextUpdate');
               }
@@ -565,7 +586,11 @@ class CrlVerifier {
               );
               if (revokedCertificates is ASN1Sequence) {
                 // Count revoked certificates - each revoked cert is a Sequence
-                result['revokedCount'] = revokedCertificates.elements.length;
+                final revokedCount = revokedCertificates.elements.length;
+                result['revokedCount'] = revokedCount;
+                parsingLogs.add(
+                  'Found $revokedCount revoked certificates in CRL',
+                );
                 print(
                   'DEBUG CRL PARSE: Found ${revokedCertificates.elements.length} revoked certificates',
                 );
@@ -735,7 +760,11 @@ class CrlVerifier {
                   'DEBUG CRL PARSE: Found extensions sequence, parsing CRL extensions...',
                 );
                 final keysBefore = result.keys.toList();
-                _parseCrlExtensions(extensionsSequence, result);
+                _parseCrlExtensions(
+                  extensionsSequence,
+                  result,
+                  logs: parsingLogs,
+                );
                 final keysAfter = result.keys.toList();
                 print(
                   'DEBUG CRL PARSE: Extensions parsing complete. Keys before: $keysBefore, keys after: $keysAfter',
@@ -780,7 +809,7 @@ class CrlVerifier {
                   print(
                     'DEBUG CRL PARSE: Last element looks like extensions, parsing...',
                   );
-                  _parseCrlExtensions(lastElement, result);
+                  _parseCrlExtensions(lastElement, result, logs: parsingLogs);
                   print(
                     'DEBUG CRL PARSE: Fallback parsing complete. Result keys: ${result.keys.toList()}',
                   );
@@ -1136,8 +1165,10 @@ class CrlVerifier {
   /// Parses CRL extensions to extract CRL Number and other extensions
   static void _parseCrlExtensions(
     ASN1Sequence extensionsSeq,
-    Map<String, dynamic> result,
-  ) {
+    Map<String, dynamic> result, {
+    List<String>? logs,
+  }) {
+    final parsingLogs = logs ?? <String>[];
     try {
       print(
         'DEBUG CRL PARSE EXT: Parsing extensions, sequence has ${extensionsSeq.elements.length} elements',
@@ -1270,6 +1301,9 @@ class CrlVerifier {
                               ? '0$hexStr'
                               : hexStr;
                           result['crlNumber'] = paddedHex;
+                          parsingLogs.add(
+                            'Extracted CRL Number: ${result['crlNumber']}',
+                          );
                           print(
                             'DEBUG CRL PARSE EXT: Extracted CRL Number from encoded bytes: ${result['crlNumber']}',
                           );
