@@ -8,7 +8,8 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProviderStateMixin {
+class _SettingsScreenState extends State<SettingsScreen>
+    with SingleTickerProviderStateMixin {
   final ConfigurationManager _configManager = ConfigurationManager();
   late TabController _tabController;
 
@@ -44,31 +45,35 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   Future<void> _saveUrls() async {
     await _configManager.setUrls(_urls);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('URLs saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('URLs saved')));
     }
   }
 
   Future<void> _saveDnsHosts() async {
     await _configManager.setDnsHosts(_dnsHosts);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DNS hosts saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('DNS hosts saved')));
     }
   }
 
   Future<void> _saveCrlUrls() async {
     await _configManager.setCrlUrls(_crlUrls);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CRL URLs saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('CRL URLs saved')));
     }
   }
 
-  Future<void> _showAddDialog(List<String> list, String type, Function(String) onAdd) async {
+  Future<void> _showAddDialog(
+    List<String> list,
+    String type,
+    Function(String) onAdd,
+  ) async {
     final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
@@ -76,10 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         title: Text('Add $type'),
         content: TextField(
           controller: controller,
-          decoration: InputDecoration(
-            hintText: 'Enter $type',
-            labelText: type,
-          ),
+          decoration: InputDecoration(hintText: 'Enter $type', labelText: type),
           autofocus: true,
         ),
         actions: [
@@ -113,7 +115,64 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     }
   }
 
-  Widget _buildListTab(List<String> items, String type, Function(String) onAdd, Function(int) onRemove, Future<void> Function() onSave) {
+  Future<void> _showEditDialog(
+    List<String> list,
+    String type,
+    int index,
+    Function(int, String) onUpdate,
+  ) async {
+    final controller = TextEditingController(text: list[index]);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit $type'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(hintText: 'Enter $type', labelText: type),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newValue = controller.text.trim();
+              if (newValue.isNotEmpty && newValue != list[index]) {
+                Navigator.pop(context, newValue);
+              } else if (newValue == list[index]) {
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() {
+        onUpdate(index, result);
+      });
+      if (type == 'URL') {
+        await _saveUrls();
+      } else if (type == 'DNS Host') {
+        await _saveDnsHosts();
+      } else if (type == 'CRL URL') {
+        await _saveCrlUrls();
+      }
+    }
+  }
+
+  Widget _buildListTab(
+    List<String> items,
+    String type,
+    Function(String) onAdd,
+    Function(int) onRemove,
+    Function(int, String) onUpdate,
+    Future<void> Function() onSave,
+  ) {
     return Column(
       children: [
         Padding(
@@ -123,7 +182,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             children: [
               Text(
                 'Configure $type',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               ElevatedButton.icon(
                 icon: const Icon(Icons.add),
@@ -139,7 +201,11 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.info_outline, size: 64, color: Colors.grey[400]),
+                      Icon(
+                        Icons.info_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'No $type items configured',
@@ -152,17 +218,30 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       child: ListTile(
                         title: Text(items[index]),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            setState(() {
-                              onRemove(index);
-                            });
-                            await onSave();
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.blue),
+                              onPressed: () =>
+                                  _showEditDialog(items, type, index, onUpdate),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                setState(() {
+                                  onRemove(index);
+                                });
+                                await onSave();
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -193,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             onPressed: () async {
               if (!mounted) return;
               final messenger = ScaffoldMessenger.of(context);
-              
+
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
@@ -215,7 +294,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
               );
 
               if (!mounted) return;
-              
+
               if (confirm == true) {
                 await _configManager.resetToDefaults();
                 await _loadConfiguration();
@@ -237,6 +316,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             'URL',
             (url) => _urls.add(url),
             (index) => _urls.removeAt(index),
+            (index, newValue) => _urls[index] = newValue,
             _saveUrls,
           ),
           _buildListTab(
@@ -244,6 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             'DNS Host',
             (host) => _dnsHosts.add(host),
             (index) => _dnsHosts.removeAt(index),
+            (index, newValue) => _dnsHosts[index] = newValue,
             _saveDnsHosts,
           ),
           _buildListTab(
@@ -251,6 +332,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             'CRL URL',
             (url) => _crlUrls.add(url),
             (index) => _crlUrls.removeAt(index),
+            (index, newValue) => _crlUrls[index] = newValue,
             _saveCrlUrls,
           ),
         ],
@@ -258,4 +340,3 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     );
   }
 }
-
