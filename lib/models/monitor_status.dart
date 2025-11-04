@@ -85,18 +85,24 @@ class MonitorItem {
           : null,
       errorMessage: json['errorMessage'] as String?,
       certificateInfo: json['certificateInfo'] != null
-          ? CertificateInfo.fromJson(json['certificateInfo'] as Map<String, dynamic>)
+          ? CertificateInfo.fromJson(
+              json['certificateInfo'] as Map<String, dynamic>,
+            )
           : null,
       urlErrorDetails: json['urlErrorDetails'] != null
-          ? UrlErrorDetails.fromJson(json['urlErrorDetails'] as Map<String, dynamic>)
+          ? UrlErrorDetails.fromJson(
+              json['urlErrorDetails'] as Map<String, dynamic>,
+            )
           : null,
       ipAddresses: json['ipAddresses'] != null
           ? (json['ipAddresses'] as List)
-              .map((ip) => IpAddressInfo.fromJson(ip as Map<String, dynamic>))
-              .toList()
+                .map((ip) => IpAddressInfo.fromJson(ip as Map<String, dynamic>))
+                .toList()
           : null,
       crlValidityInfo: json['crlValidityInfo'] != null
-          ? CrlValidityInfo.fromJson(json['crlValidityInfo'] as Map<String, dynamic>)
+          ? CrlValidityInfo.fromJson(
+              json['crlValidityInfo'] as Map<String, dynamic>,
+            )
           : null,
     );
   }
@@ -143,7 +149,8 @@ class CertificateInfo {
 }
 
 class UrlErrorDetails {
-  final String? errorType; // e.g., "ConnectionTimeout", "SSLException", "HttpException"
+  final String?
+  errorType; // e.g., "ConnectionTimeout", "SSLException", "HttpException"
   final int? httpStatusCode;
   final String? responseBody;
   final Duration? responseTime;
@@ -225,6 +232,7 @@ class CrlValidityInfo {
   final bool isExpiringSoon;
   final int? revokedCertificateCount; // Number of revoked certificates in CRL
   final String? certificateAuthority; // CA that issued the CRL
+  final String? crlNumber; // CRL Number (OID 2.5.29.20)
 
   CrlValidityInfo({
     this.validFrom,
@@ -233,6 +241,7 @@ class CrlValidityInfo {
     this.isExpiringSoon = false,
     this.revokedCertificateCount,
     this.certificateAuthority,
+    this.crlNumber,
   });
 
   Map<String, dynamic> toJson() {
@@ -243,6 +252,7 @@ class CrlValidityInfo {
       'isExpiringSoon': isExpiringSoon,
       'revokedCertificateCount': revokedCertificateCount,
       'certificateAuthority': certificateAuthority,
+      'crlNumber': crlNumber,
     };
   }
 
@@ -260,7 +270,7 @@ class CrlValidityInfo {
       isExpiringSoon: json['isExpiringSoon'] as bool? ?? false,
       revokedCertificateCount: json['revokedCertificateCount'] as int?,
       certificateAuthority: json['certificateAuthority'] as String?,
+      crlNumber: json['crlNumber'] as String?,
     );
   }
 }
-
